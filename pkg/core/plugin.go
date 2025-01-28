@@ -27,6 +27,12 @@ type Plugin interface {
 
 	// Metadata returns additional information about the plugin
 	Metadata() PluginMetadata
+
+	// ConfigSpecs returns the configuration specifications for this plugin
+	ConfigSpecs() []ConfigSpec
+
+	// Configure applies the configuration response to the plugin
+	Configure(config *ConfigResponse) error
 }
 
 // PluginMetadata contains additional information about a plugin

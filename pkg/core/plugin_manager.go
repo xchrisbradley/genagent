@@ -14,6 +14,7 @@ type PluginManager struct {
 	pluginDir string
 	plugins   map[string]Plugin
 	logger    *Logger
+	registry  *PluginRegistry
 }
 
 // NewPluginManager creates a new plugin manager instance
@@ -23,11 +24,53 @@ func NewPluginManager(world *World, pluginDir string) *PluginManager {
 		pluginDir: pluginDir,
 		plugins:   make(map[string]Plugin),
 		logger:    world.Logger,
+		registry:  NewPluginRegistry(),
 	}
 }
 
-// LoadPlugins loads all plugins from the plugin directory
+// LoadPlugins loads all plugins from both local directory and registry
 func (pm *PluginManager) LoadPlugins() error {
+	// Load local plugins first
+	if err := pm.loadLocalPlugins(); err != nil {
+		return fmt.Errorf("error loading local plugins: %v", err)
+	}
+
+	// Load registry plugins
+	registryPlugins := pm.registry.List()
+	for _, plug := range registryPlugins {
+		// Skip if plugin is already loaded locally
+		if _, exists := pm.plugins[plug.ID()]; exists {
+			pm.logger.Debug("Skipping registry plugin %s: already loaded locally", plug.ID())
+			continue
+		}
+
+		// Initialize the plugin
+		entity := NewEntity()
+		if err := plug.Initialize(pm.world, entity); err != nil {
+			pm.logger.Error("Error initializing registry plugin %s: %v", plug.ID(), err)
+			continue
+		}
+
+		// Store the plugin
+		pm.plugins[plug.ID()] = plug
+		pm.logger.Info("Loaded registry plugin: %s", plug.ID())
+	}
+
+	// Log summary
+	pm.logger.Info("Successfully loaded %d plugins total", len(pm.plugins))
+	for _, p := range pm.plugins {
+		meta := p.Metadata()
+		pm.logger.Info("Plugin: %s v%s - %s", p.Name(), p.Version(), meta.Description)
+		pm.logger.Debug("  Author: %s", meta.Author)
+		pm.logger.Debug("  Website: %s", meta.Website)
+		pm.logger.Debug("  Tags: %v", meta.Tags)
+	}
+
+	return nil
+}
+
+// loadLocalPlugins loads plugins from the local plugin directory
+func (pm *PluginManager) loadLocalPlugins() error {
 	// Ensure plugin directory exists
 	if err := os.MkdirAll(pm.pluginDir, 0755); err != nil {
 		return fmt.Errorf("error creating plugin directory: %v", err)
@@ -38,22 +81,69 @@ func (pm *PluginManager) LoadPlugins() error {
 		return fmt.Errorf("error reading plugin directory: %v", err)
 	}
 
-	pm.logger.Info("Found %d potential plugins", len(entries))
+	var pluginDirs []string
 
+	// Helper function to validate plugin directory
+	validatePluginDir := func(dir string) bool {
+		pluginSrcPath := filepath.Join(pm.pluginDir, dir, "plugin.go")
+		if _, err := os.Stat(pluginSrcPath); err != nil {
+			return false
+		}
+
+		// Check for required plugin files/structure
+		files, err := os.ReadDir(filepath.Join(pm.pluginDir, dir))
+		if err != nil {
+			return false
+		}
+
+		hasGoMod := false
+		for _, file := range files {
+			if file.Name() == "go.mod" {
+				hasGoMod = true
+				break
+			}
+		}
+
+		return hasGoMod
+	}
+
+	// Scan for plugins in root directory
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		// Check if plugin.go exists
-		pluginSrcPath := filepath.Join(pm.pluginDir, entry.Name(), "plugin.go")
-		if _, err := os.Stat(pluginSrcPath); os.IsNotExist(err) {
-			pm.logger.Debug("Skipping directory %s: no plugin.go found", entry.Name())
+		// Check if this is a direct plugin directory
+		if validatePluginDir(entry.Name()) {
+			pluginDirs = append(pluginDirs, entry.Name())
 			continue
 		}
 
+		// Check subdirectories for plugins
+		subEntries, err := os.ReadDir(filepath.Join(pm.pluginDir, entry.Name()))
+		if err != nil {
+			pm.logger.Debug("Error reading subdirectory %s: %v", entry.Name(), err)
+			continue
+		}
+
+		for _, subEntry := range subEntries {
+			if !subEntry.IsDir() {
+				continue
+			}
+
+			subDir := filepath.Join(entry.Name(), subEntry.Name())
+			if validatePluginDir(subDir) {
+				pluginDirs = append(pluginDirs, subDir)
+			}
+		}
+	}
+
+	pm.logger.Info("Found %d potential plugins", len(pluginDirs))
+
+	for _, pluginDir := range pluginDirs {
 		// Check if plugin needs compilation
-		pluginPath := filepath.Join(pm.pluginDir, entry.Name(), "plugin.so")
+		pluginPath := filepath.Join(pm.pluginDir, pluginDir, "plugin.so")
+		pluginSrcPath := filepath.Join(pm.pluginDir, pluginDir, "plugin.go")
 		compile := false
 
 		if soStat, err := os.Stat(pluginPath); os.IsNotExist(err) {
@@ -68,17 +158,17 @@ func (pm *PluginManager) LoadPlugins() error {
 		}
 
 		if compile {
-			pm.logger.Debug("Compiling plugin: %s", entry.Name())
-			if err := pm.compilePlugin(entry.Name()); err != nil {
-				pm.logger.Error("Error compiling plugin %s: %v", entry.Name(), err)
+			pm.logger.Debug("Compiling plugin: %s", pluginDir)
+			if err := pm.compilePlugin(pluginDir); err != nil {
+				pm.logger.Error("Error compiling plugin %s: %v", pluginDir, err)
 				continue
 			}
 		}
 
 		// Load the plugin
-		pm.logger.Info("Loading plugin: %s", entry.Name())
-		if err := pm.loadPlugin(entry.Name()); err != nil {
-			pm.logger.Error("Error loading plugin %s: %v", entry.Name(), err)
+		pm.logger.Info("Loading plugin: %s", pluginDir)
+		if err := pm.loadPlugin(pluginDir); err != nil {
+			pm.logger.Error("Error loading plugin %s: %v", pluginDir, err)
 			continue
 		}
 	}
@@ -139,6 +229,20 @@ func (pm *PluginManager) loadPlugin(pluginName string) error {
 
 	// Create a default entity for the plugin
 	entity := NewEntity()
+
+	// Get configuration specs and prompt for values
+	specs := plug.ConfigSpecs()
+	if len(specs) > 0 {
+		config, err := GetConfigFromUser(specs)
+		if err != nil {
+			return fmt.Errorf("error getting plugin configuration: %v", err)
+		}
+
+		// Apply configuration
+		if err := plug.Configure(config); err != nil {
+			return fmt.Errorf("error configuring plugin: %v", err)
+		}
+	}
 
 	// Initialize the plugin
 	if err := plug.Initialize(pm.world, entity); err != nil {

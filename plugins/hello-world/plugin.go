@@ -42,6 +42,16 @@ func (p *HelloWorldPlugin) Metadata() core.PluginMetadata {
 	}
 }
 
+// ConfigSpecs returns the configuration specifications for the plugin
+func (p *HelloWorldPlugin) ConfigSpecs() []core.ConfigSpec {
+	return []core.ConfigSpec{} // No configuration needed for this simple plugin
+}
+
+// Configure handles plugin configuration during initialization
+func (p *HelloWorldPlugin) Configure(config *core.ConfigResponse) error {
+	return nil // No configuration needed for this simple plugin
+}
+
 // New creates a new instance of the HelloWorld plugin
 func New() core.Plugin {
 	return &HelloWorldPlugin{}
