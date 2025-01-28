@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
-	"github.com/xchrisbradley/genagent/ai/llm"
-	"github.com/xchrisbradley/genagent/ai/storage"
 	"github.com/xchrisbradley/genagent/pkg/core"
+	"github.com/xchrisbradley/genagent/plugins/ai/llm"
+	"github.com/xchrisbradley/genagent/plugins/ai/storage"
 )
 
 // Component represents AI capabilities
@@ -22,6 +24,12 @@ type Component struct {
 	LastResponse string
 	LastUpdate   time.Time
 	Store        *storage.MessageStore
+	mutex        sync.RWMutex
+}
+
+// Type returns the type identifier of the component
+func (c *Component) Type() string {
+	return "ai"
 }
 
 // GetContextStats returns statistics about the current conversation context
@@ -38,8 +46,8 @@ func (c *Component) GetContextStats() string {
 	}
 
 	for _, msg := range c.Messages {
-		// Count tokens (rough estimate: 4 chars = 1 token)
-		tokens := len(msg.Content) / 4
+		// Count tokens using a more accurate estimation
+		tokens := countTokens(msg.Content)
 		totalTokens += tokens
 
 		// Count message types
@@ -78,6 +86,29 @@ func (c *Component) GetContextStats() string {
 }
 
 // formatDuration formats a duration in a human-readable way
+// countTokens provides a more accurate token count estimation
+func countTokens(content string) int {
+	// Split on whitespace and punctuation
+	words := strings.FieldsFunc(content, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsPunct(r)
+	})
+
+	// Base token count on words
+	tokens := len(words)
+
+	// Add extra tokens for special characters and numbers
+	for _, word := range words {
+		if strings.ContainsAny(word, "0123456789") {
+			tokens++ // Numbers often count as extra tokens
+		}
+		if len(word) > 20 {
+			tokens += len(word) / 20 // Long words may be split into multiple tokens
+		}
+	}
+
+	return tokens
+}
+
 func formatDuration(d time.Duration) string {
 	if d.Hours() > 24 {
 		days := int(d.Hours() / 24)
@@ -107,17 +138,20 @@ func (s *System) Update(world *core.World, dt float64) {
 		}
 
 		ai := comp.(*Component)
+		ai.mutex.Lock()
+		defer ai.mutex.Unlock()
 
-		// Only process if we have a new message
+		// Only process if we have a new message and enough time has passed
 		if ai.LastMessage != "" && ai.LastUpdate.After(s.lastProcessTime) {
 			fmt.Printf("\n[AI] Processing message: %s\n", ai.LastMessage)
 
-			// Add message to history with timestamp
-			ai.Messages = append(ai.Messages, llm.Message{
+			// Create new message and add to history
+			newMsg := llm.Message{
 				Role:      "user",
 				Content:   ai.LastMessage,
 				Timestamp: time.Now(),
-			})
+			}
+			ai.Messages = append(ai.Messages, newMsg)
 
 			// Get response from provider
 			response, err := ai.Provider.Process(context.Background(), ai.Messages)
@@ -130,15 +164,25 @@ func (s *System) Update(world *core.World, dt float64) {
 			ai.LastResponse = response
 			fmt.Printf("Agent: %s\n", response)
 
-			// Add response to history with timestamp
-			ai.Messages = append(ai.Messages, llm.Message{
+			// Add response to history
+			respMsg := llm.Message{
 				Role:      "assistant",
 				Content:   response,
 				Timestamp: time.Now(),
-			})
+			}
+			ai.Messages = append(ai.Messages, respMsg)
 
-			// Save messages to storage
-			if err := ai.Store.SaveMessages(ai.Messages); err != nil {
+			// Convert messages to storage format and save
+			storageMessages := make([]storage.Message, len(ai.Messages))
+			for i, msg := range ai.Messages {
+				storageMessages[i] = storage.Message{
+					Role:      msg.Role,
+					Content:   msg.Content,
+					Timestamp: msg.Timestamp,
+				}
+			}
+
+			if err := ai.Store.SaveMessages(storageMessages); err != nil {
 				fmt.Printf("[Error] Failed to save messages: %v\n", err)
 			}
 
@@ -180,21 +224,37 @@ func (p *Plugin) Initialize(world *core.World, entity core.Entity) error {
 		return fmt.Errorf("failed to get home directory: %v", err)
 	}
 
+	// Ensure storage directory exists
 	storageDir := filepath.Join(homeDir, ".genagent", "chat_history")
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		return fmt.Errorf("failed to create storage directory: %v", err)
+	}
+
+	// Initialize message store
 	store, err := storage.NewMessageStore(storageDir)
 	if err != nil {
 		return fmt.Errorf("failed to create message store: %v", err)
 	}
 
-	// Load existing messages
+	// Load existing messages with error handling
 	messages, err := store.LoadMessages()
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to load messages: %v", err)
 	}
 
+	// Convert storage messages to LLM messages
+	llmMessages := make([]llm.Message, len(messages))
+	for i, msg := range messages {
+		llmMessages[i] = llm.Message{
+			Role:      msg.Role,
+			Content:   msg.Content,
+			Timestamp: msg.Timestamp,
+		}
+	}
+
 	// If no existing messages, add initial system message
-	if len(messages) == 0 {
-		messages = append(messages, llm.Message{
+	if len(llmMessages) == 0 {
+		llmMessages = append(llmMessages, llm.Message{
 			Role:      "system",
 			Content:   "You are a helpful AI assistant. Be concise in your responses.",
 			Timestamp: time.Now(),
@@ -203,7 +263,7 @@ func (p *Plugin) Initialize(world *core.World, entity core.Entity) error {
 
 	comp := &Component{
 		Provider: p.provider,
-		Messages: messages,
+		Messages: llmMessages,
 		Store:    store,
 	}
 	world.AddComponent(entity, comp)
