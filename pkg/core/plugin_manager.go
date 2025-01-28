@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"plugin"
 )
 
 // PluginManager handles the loading and management of plugins
@@ -235,20 +236,38 @@ func (pm *PluginManager) compilePlugin(pluginName string) error {
 
 // loadPlugin loads and initializes a plugin
 func (pm *PluginManager) loadPlugin(pluginName string) error {
-	// Import the plugin package directly
-	pluginPath := fmt.Sprintf("github.com/xchrisbradley/genagent/plugins/%s", pluginName)
+	// Load the plugin using Go's plugin package
+	plugPath := filepath.Join("plugins", pluginName, "plugin.so")
+	plug, err := plugin.Open(plugPath)
+	if err != nil {
+		return fmt.Errorf("error loading plugin %s: %v", pluginName, err)
+	}
 
-	// Create a new plugin instance using the package's New function
-	plug, exists := pm.registry.Get(pluginPath)
-	if !exists {
-		return fmt.Errorf("plugin %s not found in registry", pluginName)
+	// Look up the New symbol
+	newSymbol, err := plug.Lookup("New")
+	if err != nil {
+		return fmt.Errorf("plugin %s does not export 'New' symbol: %v", pluginName, err)
+	}
+
+	// Assert that the symbol is of the correct type
+	newFunc, ok := newSymbol.(func() Plugin)
+	if !ok {
+		return fmt.Errorf("plugin %s: 'New' symbol has wrong type", pluginName)
+	}
+
+	// Create a new plugin instance
+	plugin := newFunc()
+
+	// Register the plugin with the registry
+	if err := pm.registry.Register(plugin); err != nil {
+		return fmt.Errorf("error registering plugin %s: %v", pluginName, err)
 	}
 
 	// Create a default entity for the plugin
 	entity := NewEntity()
 
 	// Get configuration specs and prompt for values
-	specs := plug.ConfigSpecs()
+	specs := plugin.ConfigSpecs()
 	if len(specs) > 0 {
 		config, err := GetConfigFromUser(specs)
 		if err != nil {
@@ -256,18 +275,18 @@ func (pm *PluginManager) loadPlugin(pluginName string) error {
 		}
 
 		// Apply configuration
-		if err := plug.Configure(config); err != nil {
+		if err := plugin.Configure(config); err != nil {
 			return fmt.Errorf("error configuring plugin: %v", err)
 		}
 	}
 
 	// Initialize the plugin
-	if err := plug.Initialize(pm.world, entity); err != nil {
+	if err := plugin.Initialize(pm.world, entity); err != nil {
 		return fmt.Errorf("error initializing plugin: %v", err)
 	}
 
 	// Store the plugin
-	pm.plugins[plug.ID()] = plug
+	pm.plugins[plugin.ID()] = plugin
 
 	return nil
 }
