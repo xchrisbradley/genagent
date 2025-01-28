@@ -92,12 +92,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1f seconds", d.Seconds())
 }
 
-// Message represents a chat message with additional metadata
-type Message struct {
-	llm.Message
-	Timestamp time.Time
-}
-
 // System processes AI interactions
 type System struct {
 	lastProcessTime time.Time
