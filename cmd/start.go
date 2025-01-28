@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,10 +32,13 @@ The command sets up the world, registers components and systems, and begins
 processing agent tasks. Use environment variables or config file to customize
 further settings.`,
 		Run: func(cmd *cobra.Command, args []string) {
+			// Initialize color scheme
+			colors := core.DefaultColorScheme()
+
 			// Initialize logger
 			logger, err := core.NewLogger(filepath.Join(".genagent", "logs"), true)
 			if err != nil {
-				fmt.Printf("Error initializing logger: %v\n", err)
+				colors.Error("Error initializing logger: %v", err)
 				return
 			}
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/xchrisbradley/genagent/pkg/core"
 )
 
 var addCmd = &cobra.Command{
@@ -16,16 +17,19 @@ var addCmd = &cobra.Command{
 		pluginName := args[0]
 		pluginDir := filepath.Join(".genagent", "plugins", pluginName)
 
+		// Initialize color scheme
+		colors := core.DefaultColorScheme()
+
 		// Create plugin directory
 		if err := os.MkdirAll(pluginDir, 0755); err != nil {
-			fmt.Printf("Error creating plugin directory: %v\n", err)
+			colors.Error("Error creating plugin directory: %v", err)
 			os.Exit(1)
 		}
 
 		// Create plugin.go file
 		pluginFile := filepath.Join(pluginDir, "plugin.go")
 		if _, err := os.Stat(pluginFile); err == nil {
-			fmt.Printf("Plugin %s already exists\n", pluginName)
+			colors.Warning("Plugin %s already exists", pluginName)
 			os.Exit(1)
 		}
 
@@ -84,11 +88,11 @@ func New() core.Plugin {
 			pluginName, pluginName, pluginName)
 
 		if err := os.WriteFile(pluginFile, []byte(template), 0644); err != nil {
-			fmt.Printf("Error writing plugin file: %v\n", err)
+			colors.Error("Error writing plugin file: %v", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("Successfully created plugin: %s\n", pluginName)
+		colors.Success("Successfully created plugin: %s", pluginName)
 	},
 }
 

@@ -1,0 +1,48 @@
+package {{.PackageName}}
+
+import (
+	"fmt"
+
+	"github.com/xchrisbradley/genagent/pkg/core"
+)
+
+type {{.PluginName}}Plugin struct{}
+
+func (p *{{.PluginName}}Plugin) ID() string {
+	return "{{.ID}}"
+}
+
+func (p *{{.PluginName}}Plugin) Name() string {
+	return "{{.Name}}"
+}
+
+func (p *{{.PluginName}}Plugin) Version() string {
+	return "{{.Version}}"
+}
+
+func (p *{{.PluginName}}Plugin) Initialize(world *core.World, entity core.Entity) error {
+	fmt.Printf("Initializing %s plugin...\n", p.Name())
+	return nil
+}
+
+func (p *{{.PluginName}}Plugin) Components() []core.Component {
+	return nil
+}
+
+func (p *{{.PluginName}}Plugin) Systems() []core.System {
+	return nil
+}
+
+func (p *{{.PluginName}}Plugin) Metadata() core.PluginMetadata {
+	return core.PluginMetadata{
+		Description: "{{.Description}}",
+		Author:      "{{.Author}}",
+		Website:     "{{.Website}}",
+		Tags:        []string{"{{.Tags}}"},
+	}
+}
+
+// New creates a new instance of the plugin
+func New() core.Plugin {
+	return &{{.PluginName}}Plugin{}
+}
