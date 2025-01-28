@@ -1,9 +1,9 @@
-package main
+package helloworld
 
 import (
 	"fmt"
 
-	"github.com/xchrisbradley/genagent/pkg/core"
+	"encore.app/pkg/plugin"
 )
 
 type HelloWorldPlugin struct{}
@@ -20,39 +20,39 @@ func (p *HelloWorldPlugin) Version() string {
 	return "1.0.0"
 }
 
-func (p *HelloWorldPlugin) Initialize(world *core.World, entity core.Entity) error {
+func (p *HelloWorldPlugin) Initialize(world plugin.World, entity plugin.Entity) error {
 	fmt.Println("Hello, World! This is your first GenAgent plugin!")
 	return nil
 }
 
-func (p *HelloWorldPlugin) Components() []core.Component {
+func (p *HelloWorldPlugin) Components() []plugin.Component {
 	return nil // No components needed for this simple plugin
 }
 
-func (p *HelloWorldPlugin) Systems() []core.System {
+func (p *HelloWorldPlugin) Systems() []plugin.System {
 	return nil // No systems needed for this simple plugin
 }
 
-func (p *HelloWorldPlugin) Metadata() core.PluginMetadata {
-	return core.PluginMetadata{
+func (p *HelloWorldPlugin) Metadata() plugin.PluginMetadata {
+	return plugin.PluginMetadata{
 		Description: "A simple hello world plugin for GenAgent",
 		Author:      "GenAgent User",
-		Website:     "https://github.com/xchrisbradley/genagent",
+		Website:     "https://encore.app",
 		Tags:        []string{"example", "hello-world"},
 	}
 }
 
 // ConfigSpecs returns the configuration specifications for the plugin
-func (p *HelloWorldPlugin) ConfigSpecs() []core.ConfigSpec {
-	return []core.ConfigSpec{} // No configuration needed for this simple plugin
+func (p *HelloWorldPlugin) ConfigSpecs() []plugin.ConfigSpec {
+	return []plugin.ConfigSpec{} // No configuration needed for this simple plugin
 }
 
 // Configure handles plugin configuration during initialization
-func (p *HelloWorldPlugin) Configure(config *core.ConfigResponse) error {
+func (p *HelloWorldPlugin) Configure(config *plugin.ConfigResponse) error {
 	return nil // No configuration needed for this simple plugin
 }
 
 // New creates a new instance of the HelloWorld plugin
-func New() core.Plugin {
+func New() plugin.Plugin {
 	return &HelloWorldPlugin{}
 }

@@ -1,5 +1,7 @@
 package core
 
+import "encore.app/pkg/plugin"
+
 // PluginComponent represents a plugin's metadata and configuration state
 type PluginComponent struct {
 	// Path is the filesystem path to the plugin
@@ -9,7 +11,7 @@ type PluginComponent struct {
 	Type string
 
 	// Metadata contains additional plugin information
-	Metadata PluginMetadata
+	Metadata plugin.PluginMetadata
 
 	// Enabled indicates if the plugin is currently active
 	Enabled bool

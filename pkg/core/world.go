@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"sync"
+
+	"encore.app/pkg/plugin"
 )
 
 // Component is an interface that all components must implement
@@ -20,6 +22,8 @@ type System interface {
 
 // World manages all entities, components, and systems
 type World struct {
+	// Ensure World implements plugin.World
+	_  plugin.World `verify:"implements"`
 	mu sync.RWMutex
 
 	entities     []Entity
@@ -78,7 +82,7 @@ func (w *World) RegisterSystem(system System) {
 }
 
 // CreateEntity creates a new entity
-func (w *World) CreateEntity() Entity {
+func (w *World) CreateEntity() plugin.Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

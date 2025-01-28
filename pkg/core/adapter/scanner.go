@@ -3,9 +3,10 @@ package adapter
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	"github.com/xchrisbradley/genagent/pkg/core"
+	"encore.app/pkg/plugin"
 )
 
 // PluginScanner analyzes repository structure and detects potential plugin opportunities
@@ -27,7 +28,7 @@ type ScanResult struct {
 	Path         string
 	Type         string
 	Dependencies []string
-	Metadata     core.PluginMetadata
+	Metadata     plugin.PluginMetadata
 }
 
 // Scan walks through the repository and identifies potential plugin opportunities
@@ -72,12 +73,27 @@ func (ps *PluginScanner) Scan() ([]ScanResult, error) {
 
 // analyzeGoModule examines a Go module for plugin potential
 func (ps *PluginScanner) analyzeGoModule(path string) *ScanResult {
-	// TODO: Implement Go module analysis
+	// Read go.mod file content
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	// Extract module dependencies
+	deps := []string{}
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "require") {
+			deps = append(deps, strings.TrimSpace(strings.TrimPrefix(line, "require")))
+		}
+	}
+
 	return &ScanResult{
-		Path: path,
-		Type: "go",
-		Metadata: core.PluginMetadata{
-			Description: "Auto-detected Go module",
+		Path:         path,
+		Type:         "go",
+		Dependencies: deps,
+		Metadata: plugin.PluginMetadata{
+			Description: "Go module with " + strconv.Itoa(len(deps)) + " dependencies",
 			Tags:        []string{"go", "auto-detected"},
 		},
 	}
@@ -89,7 +105,7 @@ func (ps *PluginScanner) analyzeNodePackage(path string) *ScanResult {
 	return &ScanResult{
 		Path: path,
 		Type: "node",
-		Metadata: core.PluginMetadata{
+		Metadata: plugin.PluginMetadata{
 			Description: "Auto-detected Node.js package",
 			Tags:        []string{"node", "auto-detected"},
 		},

@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"encore.app/pkg/core"
 	"github.com/spf13/cobra"
-	"github.com/xchrisbradley/genagent/pkg/core"
 )
 
 var addCmd = &cobra.Command{
@@ -39,7 +39,7 @@ var addCmd = &cobra.Command{
 import (
 	"fmt"
 
-	"github.com/xchrisbradley/genagent/pkg/core"
+	"encore.app/pkg/core"
 )
 
 type %sPlugin struct{}
@@ -73,7 +73,7 @@ func (p *%sPlugin) Metadata() core.PluginMetadata {
 	return core.PluginMetadata{
 		Description: "A plugin for GenAgent",
 		Author:      "GenAgent User",
-		Website:     "https://github.com/xchrisbradley/genagent",
+		Website:     "https://encore.app",
 		Tags:        []string{"plugin"},
 	}
 }

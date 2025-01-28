@@ -15,7 +15,7 @@ GenAgent is a powerful agent-based system for task automation, providing a flexi
 
 ```bash
 # Clone the repository
-git clone https://github.com/xchrisbradley/genagent.git
+git clone https://encore.app.git
 cd genagent
 
 # Install the project

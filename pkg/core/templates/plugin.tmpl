@@ -1,9 +1,7 @@
 package {{.PackageName}}
 
 import (
-	"fmt"
-
-	"github.com/xchrisbradley/genagent/pkg/core"
+	"encore.app/pkg/core"
 )
 
 type {{.PluginName}}Plugin struct{}
@@ -21,7 +19,6 @@ func (p *{{.PluginName}}Plugin) Version() string {
 }
 
 func (p *{{.PluginName}}Plugin) Initialize(world *core.World, entity core.Entity) error {
-	fmt.Printf("Initializing %s plugin...\n", p.Name())
 	return nil
 }
 
@@ -37,7 +34,6 @@ func (p *{{.PluginName}}Plugin) Metadata() core.PluginMetadata {
 	return core.PluginMetadata{
 		Description: "{{.Description}}",
 		Author:      "{{.Author}}",
-		Website:     "{{.Website}}",
 		Tags:        []string{"{{.Tags}}"},
 	}
 }

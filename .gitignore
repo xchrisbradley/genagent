@@ -1,1 +1,6 @@
 .genagent/*
+/.encore
+encore.gen.go
+encore.gen.cue
+/encore.gen
+/node_modules

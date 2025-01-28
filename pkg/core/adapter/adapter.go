@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/xchrisbradley/genagent/pkg/core"
+	"encore.app/pkg/core"
 )
 
 // RepoAdapter handles the conversion of an existing repository into a GenAgent-compatible project
@@ -55,20 +55,15 @@ func (ra *RepoAdapter) Configure(config *core.ConfigResponse) {
 // Start initializes and runs all registered plugins
 func (ra *RepoAdapter) Start() error {
 	// Create a new entity for the repository
-	_ = ra.world.CreateEntity()
-
 	// Initialize each plugin
 	for _, pluginPath := range ra.pluginPaths {
 		// Load and validate plugin
-		pluginDir := filepath.Join(ra.basePath, "plugins", filepath.Base(pluginPath))
-
-		// Create plugin directory if it doesn't exist
-		if err := os.MkdirAll(pluginDir, 0755); err != nil {
-			return fmt.Errorf("failed to create plugin directory %s: %v", pluginDir, err)
+		_, err := core.LoadPlugin(pluginPath)
+		if err != nil {
+			return fmt.Errorf("failed to load plugin %s: %v", pluginPath, err)
 		}
 
-		// TODO: Load plugin configuration and metadata
-		// For now, just associate the plugin with the entity
+		// Create plugin component
 		pluginComponent := &core.PluginComponent{
 			Path: pluginPath,
 		}
