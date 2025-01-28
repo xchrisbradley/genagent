@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 // Plugin represents a modular extension that can be added to an agent
 type Plugin interface {
@@ -41,29 +44,44 @@ type PluginMetadata struct {
 // PluginRegistry manages the lifecycle of plugins
 type PluginRegistry struct {
 	plugins map[string]Plugin
+	logger  *Logger
 }
 
 // NewPluginRegistry creates a new plugin registry
 func NewPluginRegistry() *PluginRegistry {
+	logger, err := NewLogger(filepath.Join(".genagent", "logs"), true)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+
 	return &PluginRegistry{
 		plugins: make(map[string]Plugin),
+		logger:  logger,
 	}
 }
 
 // Register adds a plugin to the registry
 func (r *PluginRegistry) Register(plugin Plugin) error {
 	id := plugin.ID()
+	r.logger.Debug("Registering plugin: %s (version %s)", id, plugin.Version())
+
 	if _, exists := r.plugins[id]; exists {
+		r.logger.Error("Plugin with ID %s already registered", id)
 		return fmt.Errorf("plugin with ID %s already registered", id)
 	}
 
 	// Validate plugin metadata
 	metadata := plugin.Metadata()
 	if metadata.Author == "" {
+		r.logger.Error("Plugin %s missing required author information", id)
 		return fmt.Errorf("plugin %s missing required author information", id)
 	}
 
 	r.plugins[id] = plugin
+	r.logger.Info("Successfully registered plugin: %s", id)
+	r.logger.Debug("Plugin details - Name: %s, Author: %s, Tags: %v",
+		plugin.Name(), metadata.Author, metadata.Tags)
+
 	return nil
 }
 

@@ -5,11 +5,11 @@ import (
 	"sync"
 )
 
-// Entity is a unique identifier for an agent
-type Entity uint64
-
 // Component is an interface that all components must implement
-type Component interface{}
+type Component interface {
+	// Type returns the type identifier of the component
+	Type() string
+}
 
 // System is an interface that all systems must implement
 type System interface {
@@ -21,25 +21,29 @@ type World struct {
 	mu sync.RWMutex
 
 	entities     []Entity
-	nextEntityID Entity
+	nextEntityID uint64
 
-	// Components are stored in a map of component type to a map of entity to component
-	components map[reflect.Type]map[Entity]Component
+	// Components are stored in a map of component type to a map of entity ID to component
+	components map[reflect.Type]map[string]Component
 
 	// Systems that process entities and components
 	systems []System
 
 	// Component types that have been registered
 	componentTypes []reflect.Type
+
+	// Resource configuration
+	resourceConfig *ResourceConfig
 }
 
 // NewWorld creates a new ECS world
 func NewWorld() *World {
 	return &World{
 		entities:       make([]Entity, 0),
-		components:     make(map[reflect.Type]map[Entity]Component),
+		components:     make(map[reflect.Type]map[string]Component),
 		systems:        make([]System, 0),
 		componentTypes: make([]reflect.Type, 0),
+		resourceConfig: NewResourceConfig("."),
 	}
 }
 
@@ -49,7 +53,7 @@ func (w *World) RegisterComponent(componentType reflect.Type) {
 	defer w.mu.Unlock()
 
 	if _, exists := w.components[componentType]; !exists {
-		w.components[componentType] = make(map[Entity]Component)
+		w.components[componentType] = make(map[string]Component)
 		w.componentTypes = append(w.componentTypes, componentType)
 	}
 }
@@ -67,8 +71,7 @@ func (w *World) CreateEntity() Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	entity := w.nextEntityID
-	w.nextEntityID++
+	entity := NewEntity()
 	w.entities = append(w.entities, entity)
 	return entity
 }
@@ -83,7 +86,7 @@ func (w *World) AddComponent(entity Entity, component Component) {
 		panic("Component type not registered: " + componentType.String())
 	}
 
-	w.components[componentType][entity] = component
+	w.components[componentType][entity.ID()] = component
 }
 
 // GetComponent returns a component for an entity
@@ -92,7 +95,7 @@ func (w *World) GetComponent(entity Entity, componentType reflect.Type) Componen
 	defer w.mu.RUnlock()
 
 	if components, exists := w.components[componentType]; exists {
-		if component, ok := components[entity]; ok {
+		if component, ok := components[entity.ID()]; ok {
 			return component
 		}
 	}
@@ -126,12 +129,12 @@ func (w *World) RemoveEntity(entity Entity) {
 
 	// Remove all components
 	for _, components := range w.components {
-		delete(components, entity)
+		delete(components, entity.ID())
 	}
 
 	// Remove from entities slice
 	for i, e := range w.entities {
-		if e == entity {
+		if e.ID() == entity.ID() {
 			w.entities = append(w.entities[:i], w.entities[i+1:]...)
 			break
 		}
