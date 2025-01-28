@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"plugin"
 )
 
 // PluginManager handles the loading and management of plugins
@@ -71,70 +70,44 @@ func (pm *PluginManager) LoadPlugins() error {
 
 // loadLocalPlugins loads plugins from the local plugin directory
 func (pm *PluginManager) loadLocalPlugins() error {
-	// Ensure plugin directory exists
+	// First try to load from root plugins directory
+	rootPluginDir := "plugins"
+	if entries, err := os.ReadDir(rootPluginDir); err == nil {
+		var pluginDirs []string
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			if validatePluginDir(filepath.Join(rootPluginDir, entry.Name())) {
+				pluginDirs = append(pluginDirs, filepath.Join(rootPluginDir, entry.Name()))
+				pm.logger.Debug("Found plugin in root directory: %s", entry.Name())
+			}
+		}
+		if len(pluginDirs) > 0 {
+			pm.logger.Info("Found %d plugins in root directory", len(pluginDirs))
+			return pm.loadPluginsFromDirs(pluginDirs)
+		}
+	}
+
+	// Fall back to .genagent directory if no plugins found in root
 	if err := os.MkdirAll(pm.pluginDir, 0755); err != nil {
 		return fmt.Errorf("error creating plugin directory: %v", err)
 	}
 
+	pm.logger.Debug("Scanning .genagent plugin directory: %s", pm.pluginDir)
 	entries, err := os.ReadDir(pm.pluginDir)
 	if err != nil {
 		return fmt.Errorf("error reading plugin directory: %v", err)
 	}
 
 	var pluginDirs []string
-
-	// Helper function to validate plugin directory
-	validatePluginDir := func(dir string) bool {
-		pluginSrcPath := filepath.Join(pm.pluginDir, dir, "plugin.go")
-		if _, err := os.Stat(pluginSrcPath); err != nil {
-			return false
-		}
-
-		// Check for required plugin files/structure
-		files, err := os.ReadDir(filepath.Join(pm.pluginDir, dir))
-		if err != nil {
-			return false
-		}
-
-		hasGoMod := false
-		for _, file := range files {
-			if file.Name() == "go.mod" {
-				hasGoMod = true
-				break
-			}
-		}
-
-		return hasGoMod
-	}
-
-	// Scan for plugins in root directory
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-
-		// Check if this is a direct plugin directory
-		if validatePluginDir(entry.Name()) {
-			pluginDirs = append(pluginDirs, entry.Name())
-			continue
-		}
-
-		// Check subdirectories for plugins
-		subEntries, err := os.ReadDir(filepath.Join(pm.pluginDir, entry.Name()))
-		if err != nil {
-			pm.logger.Debug("Error reading subdirectory %s: %v", entry.Name(), err)
-			continue
-		}
-
-		for _, subEntry := range subEntries {
-			if !subEntry.IsDir() {
-				continue
-			}
-
-			subDir := filepath.Join(entry.Name(), subEntry.Name())
-			if validatePluginDir(subDir) {
-				pluginDirs = append(pluginDirs, subDir)
-			}
+		if validatePluginDir(filepath.Join(pm.pluginDir, entry.Name())) {
+			pluginDirs = append(pluginDirs, filepath.Join(pm.pluginDir, entry.Name()))
+			pm.logger.Debug("Found plugin in .genagent directory: %s", entry.Name())
 		}
 	}
 
@@ -185,47 +158,91 @@ func (pm *PluginManager) loadLocalPlugins() error {
 	return nil
 }
 
-// compilePlugin compiles the plugin source code into a shared object file
-func (pm *PluginManager) compilePlugin(pluginName string) error {
-	pluginDir := filepath.Join(pm.pluginDir, pluginName)
-	pluginSrc := filepath.Join(pluginDir, "plugin.go")
-	pluginOut := filepath.Join(pluginDir, "plugin.so")
+// initializeGoModule creates or updates the go.mod file for a plugin
+// initializeGoModule is no longer needed as plugins are now internal packages
+func (pm *PluginManager) initializeGoModule(pluginDir string) error {
+	return nil
+}
 
-	// Build the plugin
-	cmd := exec.Command("go", "build", "-buildmode=plugin", "-o", pluginOut, pluginSrc)
-	cmd.Dir = pluginDir
+// validatePluginDir checks if a directory contains required plugin files
+func validatePluginDir(dirName string) bool {
+	// A valid plugin directory must contain plugin.go
+	pluginFile := filepath.Join(dirName, "plugin.go")
+	if _, err := os.Stat(pluginFile); err != nil {
+		return false
+	}
+	return dirName != "" && dirName != "." && dirName != ".."
+}
 
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("build failed: %v\nOutput: %s", err, output)
+// loadPluginsFromDirs loads plugins from the provided list of directories
+func (pm *PluginManager) loadPluginsFromDirs(pluginDirs []string) error {
+	for _, pluginDir := range pluginDirs {
+		// Check if plugin needs compilation
+		pluginPath := filepath.Join(pluginDir, "plugin.so")
+		pluginSrcPath := filepath.Join(pluginDir, "plugin.go")
+		compile := false
+
+		if soStat, err := os.Stat(pluginPath); os.IsNotExist(err) {
+			compile = true
+		} else if err == nil {
+			// Check if source is newer than compiled version
+			if srcStat, err := os.Stat(pluginSrcPath); err == nil {
+				if srcStat.ModTime().After(soStat.ModTime()) {
+					compile = true
+				}
+			}
+		}
+
+		if compile {
+			pm.logger.Debug("Compiling plugin: %s", filepath.Base(pluginDir))
+			if err := pm.compilePlugin(filepath.Base(pluginDir)); err != nil {
+				pm.logger.Error("Error compiling plugin %s: %v", filepath.Base(pluginDir), err)
+				continue
+			}
+		}
+
+		// Load the plugin
+		pm.logger.Info("Loading plugin: %s", filepath.Base(pluginDir))
+		if err := pm.loadPlugin(filepath.Base(pluginDir)); err != nil {
+			pm.logger.Error("Error loading plugin %s: %v", filepath.Base(pluginDir), err)
+			continue
+		}
 	}
 
 	return nil
 }
 
-// loadPlugin loads a compiled plugin and initializes it
+// compilePlugin compiles a plugin from source
+func (pm *PluginManager) compilePlugin(pluginName string) error {
+	pluginDir := filepath.Join("plugins", pluginName)
+
+	// Initialize or update go.mod if needed
+	if err := pm.initializeGoModule(pluginDir); err != nil {
+		return fmt.Errorf("failed to initialize go module: %v", err)
+	}
+
+	// Set up build command with proper flags for plugin
+	buildCmd := exec.Command("go", "build", "-buildmode=plugin", "-o", "plugin.so", "-tags", "plugin", "main.go")
+	buildCmd.Dir = pluginDir
+
+	// Execute build
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to compile plugin: %v\nOutput: %s", err, output)
+	}
+
+	return nil
+}
+
+// loadPlugin loads and initializes a plugin
 func (pm *PluginManager) loadPlugin(pluginName string) error {
-	pluginPath := filepath.Join(pm.pluginDir, pluginName, "plugin.so")
+	// Import the plugin package directly
+	pluginPath := fmt.Sprintf("github.com/xchrisbradley/genagent/plugins/%s", pluginName)
 
-	// Open the plugin
-	p, err := plugin.Open(pluginPath)
-	if err != nil {
-		return fmt.Errorf("error opening plugin: %v", err)
+	// Create a new plugin instance using the package's New function
+	plug, exists := pm.registry.Get(pluginPath)
+	if !exists {
+		return fmt.Errorf("plugin %s not found in registry", pluginName)
 	}
-
-	// Look up the New function
-	sym, err := p.Lookup("New")
-	if err != nil {
-		return fmt.Errorf("plugin does not export 'New' function: %v", err)
-	}
-
-	// Assert that the symbol is a function that returns a Plugin
-	newFunc, ok := sym.(func() Plugin)
-	if !ok {
-		return fmt.Errorf("plugin symbol is not a function that returns Plugin interface")
-	}
-
-	// Create a new plugin instance
-	plug := newFunc()
 
 	// Create a default entity for the plugin
 	entity := NewEntity()
