@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+	"path/filepath"
 	"reflect"
 	"sync"
 )
@@ -34,16 +36,25 @@ type World struct {
 
 	// Resource configuration
 	resourceConfig *ResourceConfig
+
+	// Logger instance
+	Logger *Logger
 }
 
 // NewWorld creates a new ECS world
 func NewWorld() *World {
+	logger, err := NewLogger(filepath.Join(".genagent", "logs"), true)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+
 	return &World{
 		entities:       make([]Entity, 0),
 		components:     make(map[reflect.Type]map[string]Component),
 		systems:        make([]System, 0),
 		componentTypes: make([]reflect.Type, 0),
 		resourceConfig: NewResourceConfig("."),
+		Logger:         logger,
 	}
 }
 

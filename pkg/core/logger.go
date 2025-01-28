@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// ANSI color codes
+const (
+	ColorReset   = "\033[0m"
+	ColorCyan    = "\033[36m"
+	ColorMagenta = "\033[35m"
+	ColorRed     = "\033[31m"
+)
+
 // Logger provides structured logging for the application
 type Logger struct {
 	debugLogger *log.Logger
@@ -38,9 +46,9 @@ func NewLogger(logDir string, debug bool) (*Logger, error) {
 	errorWriter := io.MultiWriter(file, os.Stderr)
 
 	return &Logger{
-		debugLogger: log.New(multiWriter, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile),
-		infoLogger:  log.New(multiWriter, "INFO:  ", log.Ldate|log.Ltime),
-		errorLogger: log.New(errorWriter, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile),
+		debugLogger: log.New(multiWriter, ColorMagenta+"DEBUG: "+ColorReset, log.Ldate|log.Ltime|log.Lshortfile),
+		infoLogger:  log.New(multiWriter, ColorCyan+"INFO:  "+ColorReset, log.Ldate|log.Ltime),
+		errorLogger: log.New(errorWriter, ColorRed+"ERROR: "+ColorReset, log.Ldate|log.Ltime|log.Lshortfile),
 		isDebug:     debug,
 	}, nil
 }

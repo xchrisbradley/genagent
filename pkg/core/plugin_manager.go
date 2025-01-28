@@ -13,6 +13,7 @@ type PluginManager struct {
 	world     *World
 	pluginDir string
 	plugins   map[string]Plugin
+	logger    *Logger
 }
 
 // NewPluginManager creates a new plugin manager instance
@@ -21,33 +22,74 @@ func NewPluginManager(world *World, pluginDir string) *PluginManager {
 		world:     world,
 		pluginDir: pluginDir,
 		plugins:   make(map[string]Plugin),
+		logger:    world.Logger,
 	}
 }
 
 // LoadPlugins loads all plugins from the plugin directory
 func (pm *PluginManager) LoadPlugins() error {
+	// Ensure plugin directory exists
+	if err := os.MkdirAll(pm.pluginDir, 0755); err != nil {
+		return fmt.Errorf("error creating plugin directory: %v", err)
+	}
+
 	entries, err := os.ReadDir(pm.pluginDir)
 	if err != nil {
 		return fmt.Errorf("error reading plugin directory: %v", err)
 	}
+
+	pm.logger.Info("Found %d potential plugins", len(entries))
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
+		// Check if plugin.go exists
+		pluginSrcPath := filepath.Join(pm.pluginDir, entry.Name(), "plugin.go")
+		if _, err := os.Stat(pluginSrcPath); os.IsNotExist(err) {
+			pm.logger.Debug("Skipping directory %s: no plugin.go found", entry.Name())
+			continue
+		}
+
+		// Check if plugin needs compilation
 		pluginPath := filepath.Join(pm.pluginDir, entry.Name(), "plugin.so")
-		if _, err := os.Stat(pluginPath); os.IsNotExist(err) {
-			// Try to compile the plugin
+		compile := false
+
+		if soStat, err := os.Stat(pluginPath); os.IsNotExist(err) {
+			compile = true
+		} else if err == nil {
+			// Check if source is newer than compiled version
+			if srcStat, err := os.Stat(pluginSrcPath); err == nil {
+				if srcStat.ModTime().After(soStat.ModTime()) {
+					compile = true
+				}
+			}
+		}
+
+		if compile {
+			pm.logger.Debug("Compiling plugin: %s", entry.Name())
 			if err := pm.compilePlugin(entry.Name()); err != nil {
-				return fmt.Errorf("error compiling plugin %s: %v", entry.Name(), err)
+				pm.logger.Error("Error compiling plugin %s: %v", entry.Name(), err)
+				continue
 			}
 		}
 
 		// Load the plugin
+		pm.logger.Info("Loading plugin: %s", entry.Name())
 		if err := pm.loadPlugin(entry.Name()); err != nil {
-			return fmt.Errorf("error loading plugin %s: %v", entry.Name(), err)
+			pm.logger.Error("Error loading plugin %s: %v", entry.Name(), err)
+			continue
 		}
+	}
+
+	pm.logger.Info("Successfully loaded %d plugins", len(pm.plugins))
+	for _, p := range pm.plugins {
+		meta := p.Metadata()
+		pm.logger.Info("Plugin: %s v%s - %s", p.Name(), p.Version(), meta.Description)
+		pm.logger.Debug("  Author: %s", meta.Author)
+		pm.logger.Debug("  Website: %s", meta.Website)
+		pm.logger.Debug("  Tags: %v", meta.Tags)
 	}
 
 	return nil
@@ -98,13 +140,13 @@ func (pm *PluginManager) loadPlugin(pluginName string) error {
 	// Create a default entity for the plugin
 	entity := NewEntity()
 
-	// Initialize the plugin with the default entity
+	// Initialize the plugin
 	if err := plug.Initialize(pm.world, entity); err != nil {
 		return fmt.Errorf("error initializing plugin: %v", err)
 	}
 
 	// Store the plugin
-	pm.plugins[pluginName] = plug
+	pm.plugins[plug.ID()] = plug
 
 	return nil
 }

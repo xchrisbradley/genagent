@@ -1,8 +1,0 @@
-INFO:  2025/01/28 14:24:34 Updating dependencies...
-ERROR: 2025/01/28 14:24:37 start.go:66: Error updating dependencies: exit status 1
-Output: go: finding module for package github.com/xchrisbradley/genagent/ai/storage
-go: finding module for package github.com/xchrisbradley/genagent/ai/llm
-go: github.com/xchrisbradley/genagent/plugins/ai imports
-	github.com/xchrisbradley/genagent/ai/llm: no matching versions for query "latest"
-go: github.com/xchrisbradley/genagent/plugins/ai imports
-	github.com/xchrisbradley/genagent/ai/storage: no matching versions for query "latest"
