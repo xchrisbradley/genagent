@@ -44,7 +44,7 @@ func (a *Activity) SendConsentEmail(ctx context.Context, to, from, subject strin
 		To:           to,
 		From:         from,
 		Subject:      subject,
-		TemplateID:   "screening-consent-request-v1",
+		TemplateID:   "consent",
 		TemplateData: templateData,
 	})
 	if err != nil {

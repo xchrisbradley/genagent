@@ -88,7 +88,7 @@ func initService() (*Service, error) {
 	reminderActivity := reminder.NewActivity(nil)
 
 	w := worker.New(c, agentTaskQueue, worker.Options{})
-	w.RegisterWorkflow(workflows.Screening)
+	w.RegisterWorkflow(workflows.Agent)
 	w.RegisterActivity(researchActivity.SendResearchRequest)
 	w.RegisterActivity(consentActivity.SendConsentEmail)
 	w.RegisterActivity(reminderActivity.SendReminder)

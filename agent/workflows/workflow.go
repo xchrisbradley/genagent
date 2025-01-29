@@ -138,7 +138,7 @@ func WaitForAcceptance(ctx workflow.Context) (bool, error) {
 }
 
 // Screening is the main workflow function
-func Screening(ctx workflow.Context, input *ScreeningWorkflowInput) (*ScreeningStatus, error) {
+func Agent(ctx workflow.Context, input *ScreeningWorkflowInput) (*ScreeningStatus, error) {
 	logger := workflow.GetLogger(ctx)
 	status := &ScreeningStatus{
 		Status:          types.StatusPending,

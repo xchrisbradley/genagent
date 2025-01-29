@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS conversations;
+DROP TABLE IF EXISTS bots;
+DROP TABLE IF EXISTS protocol_records;
+DROP TABLE IF EXISTS protocol_stats;
+DROP TABLE IF EXISTS agent;
+DROP TABLE IF EXISTS agent_embeddings;
+DROP TABLE IF EXISTS agent_embeddings_index;
+DROP TABLE IF EXISTS llm_requests;
